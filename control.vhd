@@ -75,7 +75,7 @@ i_expDiff(0));
     --no overflow in the bigALU, or state 4
     int_nextState(5) <= (int_curState(3) and not i_bigALUResult(9)) or 
                           (int_curState(4)) or (int_curState(5) and not i_LRReg(8));
-    int_nextState(6) <= (int_curState(5) and  i_LRReg(8)); 
+    int_nextState(6) <= (int_curState(5) and  i_LRReg(8)) or int_curState(6); 
     
     	s_0: enARdFF_2_high
 			port map(
