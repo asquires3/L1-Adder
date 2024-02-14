@@ -34,7 +34,7 @@ architecture rtl of fullSys is
   
   signal int_curState : std_logic_vector(6 downto 0);
   
-  signal int_finalSign, int_sameSigns, int_notSameSigns, int_loadFinal : std_logic;
+  signal int_finalSign, int_sameSigns, int_notSameSigns, int_loadFinal, int_sameExp7 : std_logic;
   signal int_finalVal : std_logic_vector(15 downto 0);
 
   signal int_sameExp : std_logic;
@@ -121,11 +121,10 @@ end component;
 	    
 	    int_sameSigns <= int_Aout(15) xnor int_Bout(15);
 	    
+		 --concat the sign, exponent, and mantissa to store in A/B
 	    int_Ain <= i_signA & i_exponentA & i_mantissaA;
 	    int_Bin <= i_signB & i_exponentB & i_mantissaB;
-	    
-	    int_sameExp <= int_ABcout and int_BAcout;
-	    
+	    	    
 	    controller: control	    
     port map(
       i_clock => i_GClock, 
@@ -175,7 +174,9 @@ end component;
 	           o_value => int_Bout
 	         );
 	       
-	    --if subtracting larger from smaller we get 
+	    --both versions of subtraction, EXP_A - EXP_B, and EXP_B - EXP_A
+		 --we use to find a carryout in the subtraction
+		 --if there is a carryout, then the minuend is the larger exponent 
 	    ABExpSub: nFullAdderSubtractor
 	     generic map(n=>7)
 	     port map(
@@ -195,7 +196,13 @@ end component;
 	         o_carryOut => int_BAcout,
 	         o_sumOut => int_BAsout
 	       );
+			 
+			--if they both had a carryout, then the exponents were equal
+			int_sameExp <= int_ABcout and int_BAcout;
 	       
+	    --check if the exponents have the same 7th bit, overflow can only occur when this value is 1
+	    --if both have 7th hit the same, and the result does not   
+	    int_sameExp7 <= int_Aout(14) xnor int_Bout(14);   
 	      --if there is a carry out, then the smaller was subtracted from the larger 
 	      expChoice: nMux2In
 	       generic map(n=>7)
@@ -259,6 +266,7 @@ end component;
 	       
 	       int_largerMantAppended <= '1' & int_largerMantissa;
 	       int_notSameSigns <= not int_sameSigns;
+	       
 	       bigALU: nFullAdderSubtractor
 	       generic map(n=>9)
 	       port map(
@@ -309,6 +317,16 @@ end component;
 	           i_b => int_Bout(7 downto 0),
 	           o_carryOut => int_AMlarger
 	         );
+  
+				--primary deciding characteristic for sign, find the larger exponent, the final sign will follow
+				--the sign of the number with the greater exponent
+          largerExpMuxForSign: mux1bit
+            port map(
+              i_op0 => int_Bout(15),
+              i_op1 => int_Aout(15),
+              i_choice => int_ABcout,
+              o_out => int_largerExpSign
+            );
 	         
 	         --secondary deciding characteristic for the sign, used if exponents are equal, look at the mantissa
 	       largerMantMuxForSign: mux1bit
@@ -318,16 +336,9 @@ end component;
 	           i_choice => int_AMlarger,
 	           o_out => int_MantSign
 	         );
-  
-          largerExpMuxForSign: mux1bit
-            port map(
-              i_op0 => int_Bout(15),
-              i_op1 => int_Aout(15),
-              i_choice => int_ABcout,
-              o_out => int_largerExpSign
-            );
   	         
 	         --main characteristic of sign, if one exponent is larger, use the sign from that one
+				--otherwise use the sign of the number with the larger mantissa
 	         finalSignMux: mux1bit
 	           port map(
 	             i_op0 => int_largerExpSign,
@@ -336,7 +347,7 @@ end component;
 	             o_out => int_finalSign
 	           );
 	          
-	          
+	          --combine the finalSign, finalExponent, and the final Mantissa and store it
 	          int_finalVal <= int_finalSign & int_incDecRegOut & int_LRRegOut(7 downto 0);
 	          finalReg: shiftNBit
 	         generic map(n=>16, shift=>1)
@@ -349,8 +360,11 @@ end component;
 	           o_value => int_finalOut
 	         );
 	           
-	           
-	         LRRegL:  shiftNBitArithm
+	     
+			--these 2 registers are used to store the value out of the shift left or right register
+			--each registers shifts in a different direction, could have built a bidirectional shift reg
+			--but just repurposed these
+	     LRRegL:  shiftNBitArithm
         generic map(n=>10, shift=>-1)
         port map(
           i_clock => i_GClock, 
@@ -373,7 +387,8 @@ end component;
           i_value => int_bigALUResult,
           o_value => int_LRRegRout
         );
-        
+				
+				--choose the correct register depending on if we were shifting left or right
 	         LRRegisterMux: nMux2In
 	           generic map(n=>10)
 	           port map(
@@ -384,6 +399,8 @@ end component;
 	             o_out => int_LRRegOut
 	           );
 	           
-	           o_sum <= int_finalOut;
+				  --overflow if the final exponent has rolled over to 0000000 or under to 1111111
+	           o_overflow <= int_curState(6) and (int_Aout(14) xor int_finalOut(14)) and int_sameExp7;
+				  o_sum <= int_finalOut;
 	           
 	       end rtl;

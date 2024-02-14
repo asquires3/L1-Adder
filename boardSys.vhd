@@ -85,6 +85,12 @@ architecture rtl of boardSys is
 	             o_sum => int_sum
 	           );
 				  
+				  --switch states sw1sw0
+										 --X0 - sum
+										 --01 - A
+										 --11 - B
+				  
+				  --switch 1
 				aorb: nMux2In
 					generic map(n=>16)
 					port map(
@@ -94,6 +100,7 @@ architecture rtl of boardSys is
 						o_out => int_AorB
 					);
 					
+					--switch 0
 				ABorS: nMux2In
 					generic map(n=>16)
 					port map(
@@ -103,8 +110,13 @@ architecture rtl of boardSys is
 						o_out => int_ABorS
 					);
 	           
+				  --R0 -> R15, the current selected number
 	           o_ledsOut <= int_ABorS;
+				  
+				  --G8 high when overflow
 	           o_overflow <= int_overflow;
 				  
+				  --G0, high when both A and B have been inputted
 				  o_inputDone <= int_finished;
+				  
 	           end rtl;
